@@ -5,41 +5,48 @@
 #ifndef DEQUE__DEQUE_H_
 #define DEQUE__DEQUE_H_
 
-template <typename T>
-class Deque {
- private:
+template <typename T> class Deque {
+private:
   static const size_t kSizeOfInnerArray = 512;
 
-  template <bool is_const>
-  class CommonIterator;
+  template <bool is_const> class CommonIterator;
 
-  T** deque_;
+  T **deque_;
   size_t outer_array_size_;
 
- public:
+public:
   using iterator = CommonIterator<false>;
   using const_iterator = CommonIterator<true>;
   using reverse_iterator = std::reverse_iterator<iterator>;
   using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
- private:
+private:
   iterator very_begin_iterator_;
   iterator very_end_iterator_;
   iterator begin_;
   iterator end_;
 
- public:
+  struct Memento {
+    T** deque;
+    size_t outer_size;
+    typename Deque<T>::iterator very_begin;
+    typename Deque<T>::iterator very_end;
+    typename Deque<T>::iterator begin;
+    typename Deque<T>::iterator end;
+  };
+
+public:
   using size_type = size_t;
   using value_type = T;
-  using reference = T&;
-  using const_reference = const T&;
+  using reference = T &;
+  using const_reference = const T &;
 
   Deque();
   ~Deque();
-  Deque(const Deque<value_type>& other);
+  Deque(const Deque<value_type> &other);
   explicit Deque(size_type count);
   Deque(size_type count, const_reference value);
-  Deque<value_type>& operator=(const Deque<value_type>& other);
+  Deque<value_type> &operator=(const Deque<value_type> &other);
 
   [[nodiscard]] size_type size() const;
 
@@ -68,46 +75,49 @@ class Deque {
   const_reverse_iterator crend() const;
 
   iterator insert(const_iterator pos, const_reference value);
-  template< class... Args >
-  void emplace_back( Args&&... args );
+  template <class... Args> void emplace_back(Args &&...args);
   iterator erase(const_iterator pos);
 
- private:
+private:
+  void Deallocate(size_t allocated_until);
+  void SafeAllocation();
+  void SafeCopy(const_iterator other_iter);
+  Memento Save();
+  void Restore(const Memento& memento);
+
   void resize();
 };
 
-template <typename T>
-template <bool is_const>
-class Deque<T>::CommonIterator {
- public:
+template <typename T> template <bool is_const> class Deque<T>::CommonIterator {
+public:
   using iterator_category = std::random_access_iterator_tag;
   using value_type = T;
   using difference_type = ssize_t;
-  using pointer = typename std::conditional<is_const, const T*, T*>::type;
-  using reference = typename std::conditional<is_const, const T&, T&>::type;
+  using pointer = typename std::conditional<is_const, const T *, T *>::type;
+  using reference = typename std::conditional<is_const, const T &, T &>::type;
 
   CommonIterator();
-  CommonIterator(T** outer_pointer, size_t idx);
-  CommonIterator(const CommonIterator<is_const>& other);
+  CommonIterator(T **outer_pointer, size_t idx);
+  CommonIterator(const CommonIterator<is_const> &other);
 
-  CommonIterator<is_const>& operator++();
-  CommonIterator<is_const>& operator--();
+  CommonIterator<is_const> &operator++();
+  CommonIterator<is_const> &operator--();
   CommonIterator<is_const> operator++(int);
   CommonIterator<is_const> operator--(int);
 
-  CommonIterator<is_const>& operator+=(difference_type shift);
-  CommonIterator<is_const>& operator-=(difference_type shift);
+  CommonIterator<is_const> &operator+=(difference_type shift);
+  CommonIterator<is_const> &operator-=(difference_type shift);
   CommonIterator<is_const> operator+(difference_type shift) const;
   CommonIterator<is_const> operator-(difference_type shift) const;
 
-  bool operator<(const CommonIterator<true>& other) const;
-  bool operator>(const CommonIterator<true>& other) const;
-  bool operator<=(const CommonIterator<true>& other) const;
-  bool operator>=(const CommonIterator<true>& other) const;
-  bool operator==(const CommonIterator<true>& other) const;
-  bool operator!=(const CommonIterator<true>& other) const;
+  bool operator<(const CommonIterator<true> &other) const;
+  bool operator>(const CommonIterator<true> &other) const;
+  bool operator<=(const CommonIterator<true> &other) const;
+  bool operator>=(const CommonIterator<true> &other) const;
+  bool operator==(const CommonIterator<true> &other) const;
+  bool operator!=(const CommonIterator<true> &other) const;
 
-  difference_type operator-(const CommonIterator<is_const>& other) const;
+  difference_type operator-(const CommonIterator<is_const> &other) const;
   reference operator*();
   pointer operator->();
 
@@ -115,8 +125,8 @@ class Deque<T>::CommonIterator {
 
   friend class CommonIterator<!is_const>;
 
- private:
-  T** outer_pointer_;
+private:
+  T **outer_pointer_;
   size_t idx_;
 };
 
@@ -126,19 +136,19 @@ Deque<T>::CommonIterator<is_const>::CommonIterator() = default;
 
 template <typename T>
 template <bool is_const>
-Deque<T>::CommonIterator<is_const>::CommonIterator(T** outer_pointer,
+Deque<T>::CommonIterator<is_const>::CommonIterator(T **outer_pointer,
                                                    size_t idx)
     : outer_pointer_(outer_pointer), idx_(idx) {}
 
 template <typename T>
 template <bool is_const>
 Deque<T>::CommonIterator<is_const>::CommonIterator(
-    const CommonIterator<is_const>& other)
+    const CommonIterator<is_const> &other)
     : outer_pointer_(other.outer_pointer_), idx_(other.idx_) {}
 
 template <typename T>
 template <bool is_const>
-typename Deque<T>::template CommonIterator<is_const>&
+typename Deque<T>::template CommonIterator<is_const> &
 Deque<T>::CommonIterator<is_const>::operator++() {
   ++idx_;
   if (idx_ == kSizeOfInnerArray) {
@@ -150,7 +160,7 @@ Deque<T>::CommonIterator<is_const>::operator++() {
 
 template <typename T>
 template <bool is_const>
-typename Deque<T>::template CommonIterator<is_const>&
+typename Deque<T>::template CommonIterator<is_const> &
 Deque<T>::CommonIterator<is_const>::operator--() {
   if (idx_ == 0) {
     --outer_pointer_;
@@ -180,7 +190,7 @@ Deque<T>::CommonIterator<is_const>::operator--(int) {
 
 template <typename T>
 template <bool is_const>
-typename Deque<T>::template CommonIterator<is_const>&
+typename Deque<T>::template CommonIterator<is_const> &
 Deque<T>::CommonIterator<is_const>::operator+=(difference_type shift) {
   if (shift == 0) {
     return *this;
@@ -199,7 +209,7 @@ Deque<T>::CommonIterator<is_const>::operator+=(difference_type shift) {
 
 template <typename T>
 template <bool is_const>
-typename Deque<T>::template CommonIterator<is_const>&
+typename Deque<T>::template CommonIterator<is_const> &
 Deque<T>::CommonIterator<is_const>::operator-=(difference_type shift) {
   if (shift == 0) {
     return *this;
@@ -237,7 +247,7 @@ Deque<T>::CommonIterator<is_const>::operator-(difference_type shift) const {
 template <typename T>
 template <bool is_const>
 bool Deque<T>::CommonIterator<is_const>::operator<(
-    const Deque<T>::CommonIterator<true>& other) const {
+    const Deque<T>::CommonIterator<true> &other) const {
   return (outer_pointer_ < other.outer_pointer_) ||
          (outer_pointer_ == other.outer_pointer_ && idx_ < other.idx_);
 }
@@ -245,35 +255,35 @@ bool Deque<T>::CommonIterator<is_const>::operator<(
 template <typename T>
 template <bool is_const>
 bool Deque<T>::CommonIterator<is_const>::operator>(
-    const Deque<T>::CommonIterator<true>& other) const {
+    const Deque<T>::CommonIterator<true> &other) const {
   return other < *this;
 }
 
 template <typename T>
 template <bool is_const>
 bool Deque<T>::CommonIterator<is_const>::operator<=(
-    const Deque<T>::CommonIterator<true>& other) const {
+    const Deque<T>::CommonIterator<true> &other) const {
   return !(*this > other);
 }
 
 template <typename T>
 template <bool is_const>
 bool Deque<T>::CommonIterator<is_const>::operator>=(
-    const Deque<T>::CommonIterator<true>& other) const {
+    const Deque<T>::CommonIterator<true> &other) const {
   return !(*this < other);
 }
 
 template <typename T>
 template <bool is_const>
 bool Deque<T>::CommonIterator<is_const>::operator==(
-    const Deque<T>::CommonIterator<true>& other) const {
+    const Deque<T>::CommonIterator<true> &other) const {
   return !((*this < other) || (other < *this));
 }
 
 template <typename T>
 template <bool is_const>
 bool Deque<T>::CommonIterator<is_const>::operator!=(
-    const Deque<T>::CommonIterator<true>& other) const {
+    const Deque<T>::CommonIterator<true> &other) const {
   return !(*this == other);
 }
 
@@ -281,7 +291,7 @@ template <typename T>
 template <bool is_const>
 typename Deque<T>::template CommonIterator<is_const>::difference_type
 Deque<T>::CommonIterator<is_const>::operator-(
-    const CommonIterator<is_const>& other) const {
+    const CommonIterator<is_const> &other) const {
   return (outer_pointer_ - other.outer_pointer_) * kSizeOfInnerArray +
          (idx_ - other.idx_);
 }
@@ -310,25 +320,56 @@ Deque<T>::CommonIterator<is_const>::operator CommonIterator<true>() const {
 
 template <typename T>
 Deque<T>::Deque()
-    : deque_(nullptr),
-      outer_array_size_(0),
-      very_begin_iterator_(deque_, 0),
-      very_end_iterator_(very_begin_iterator_),
-      begin_(very_begin_iterator_),
+    : deque_(nullptr), outer_array_size_(0), very_begin_iterator_(deque_, 0),
+      very_end_iterator_(very_begin_iterator_), begin_(very_begin_iterator_),
       end_(very_end_iterator_) {}
 
+template <typename T> void Deque<T>::Deallocate(size_t allocated_until) {
+  for (size_t j = 0; j < allocated_until; ++j) {
+    operator delete[](deque_[j]);
+  }
+  delete[] deque_;
+}
+
+template <typename T> void Deque<T>::SafeAllocation() {
+  deque_ = new T *[outer_array_size_];
+  for (size_t i = 0; i < outer_array_size_; ++i) {
+    try {
+      deque_[i] =
+          static_cast<T *>(operator new[](sizeof(T) * kSizeOfInnerArray));
+    } catch (...) {
+      Deallocate(i);
+      throw;
+    }
+  }
+}
+
+template <typename T> void Deque<T>::SafeCopy(const_iterator other_iter) {
+  iterator this_iter = this->begin();
+  while (this_iter < this->end_) {
+    try {
+      new (&(*this_iter)) T(*other_iter);
+    } catch (...) {
+      for (iterator it = this->begin(); it < this_iter; ++it) {
+        it->~T();
+      }
+      Deallocate(outer_array_size_);
+      throw;
+    }
+    ++this_iter;
+    ++other_iter;
+  }
+}
+
 template <typename T>
-Deque<T>::Deque(const Deque<value_type>& other) : Deque() {
+Deque<T>::Deque(const Deque<value_type> &other) : Deque() {
   if (other.deque_ == nullptr) {
     return;
   }
 
   outer_array_size_ = other.outer_array_size_;
 
-  deque_ = new T*[outer_array_size_];
-  for (size_t i = 0; i < outer_array_size_; ++i) {
-    deque_[i] = static_cast<T*>(operator new(sizeof(T) * kSizeOfInnerArray));
-  }
+  SafeAllocation();
 
   very_begin_iterator_ = iterator(deque_, 0);
   very_end_iterator_ = iterator(deque_ + outer_array_size_, 0);
@@ -336,119 +377,93 @@ Deque<T>::Deque(const Deque<value_type>& other) : Deque() {
   begin_ = very_begin_iterator_ + (other.begin_ - other.very_begin_iterator_);
   end_ = very_begin_iterator_ + (other.end_ - other.very_begin_iterator_);
 
-  auto this_iter = this->begin_;
-  auto other_iter = other.begin_;
-  while (this_iter < this->end_) {
-    *this_iter = *other_iter;
-    ++this_iter;
-    ++other_iter;
+  SafeCopy(other.begin_);
+}
+
+template <typename T> Deque<T>::Deque(size_type count) : Deque(count, T()) {}
+
+template<typename T>
+void Destroy(typename Deque<T>::iterator begin, typename Deque<T>::iterator end) {
+  for (typename Deque<T>::iterator it = begin; it < end; ++it) {
+    it->~T();
   }
 }
 
-template <typename T>
-Deque<T>::Deque(size_type count) {
+template <typename T> Deque<T>::Deque(size_type count, const_reference value) {
   outer_array_size_ =
       std::max((count + kSizeOfInnerArray - 1) / kSizeOfInnerArray, 2ul);
-  deque_ = new T*[outer_array_size_];
-  for (size_t i = 0; i < outer_array_size_; ++i) {
-    deque_[i] = static_cast<T*>(operator new(sizeof(T) * kSizeOfInnerArray));
-  }
+  SafeAllocation();
 
   very_begin_iterator_ = iterator(deque_, 0);
   very_end_iterator_ = iterator(deque_ + outer_array_size_, 0);
   begin_ = iterator(deque_, 0);
   end_ = begin_ + count;
-  for (auto& elem : *this) {
-    elem = T();
+  for (iterator it = begin_; it < end_; ++it) {
+    try {
+      new (&*it) T(value);
+    } catch (...) {
+      Destroy<T>(begin_, it);
+      Deallocate(outer_array_size_);
+      throw;
+    }
   }
 }
 
 template <typename T>
-Deque<T>::Deque(size_type count, const_reference value) {
-  outer_array_size_ =
-      std::max((count + kSizeOfInnerArray - 1) / kSizeOfInnerArray, 2ul);
-  deque_ = new T*[outer_array_size_];
-  for (size_t i = 0; i < outer_array_size_; ++i) {
-    deque_[i] = static_cast<T*>(operator new(sizeof(T) * kSizeOfInnerArray));
-  }
-
-  very_begin_iterator_ = iterator(deque_, 0);
-  very_end_iterator_ = iterator(deque_ + outer_array_size_, 0);
-  begin_ = iterator(deque_, 0);
-  end_ = begin_ + count;
-  for (auto& elem : *this) {
-    elem = value;
-  }
+typename Deque<T>::Memento Deque<T>::Save() {
+  return {
+    deque_,
+    outer_array_size_,
+    very_begin_iterator_,
+    very_end_iterator_,
+    begin_,
+    end_
+  };
 }
 
 template <typename T>
-Deque<T>& Deque<T>::operator=(const Deque<value_type>& other) {
+void Deque<T>::Restore(const Memento &memento){
+  deque_ = memento.deque;
+  outer_array_size_ = memento.outer_size;
+  very_begin_iterator_ = memento.very_begin;
+  very_end_iterator_ = memento.very_end;
+  begin_ = memento.begin;
+  end_ = memento.end;
+}
+
+template <typename T>
+Deque<T> &Deque<T>::operator=(const Deque<value_type> &other) {
   if (deque_ == other.deque_) {
     return *this;
   }
-  if (other.deque_ == nullptr) {
-    return *this = Deque<T>();
-  }
-  T** deque_tmp = deque_;
-  auto outer_array_size_tmp = outer_array_size_;
-  auto very_begin_iterator_tmp = very_begin_iterator_;
-  auto very_end_iterator_tmp = very_end_iterator_;
-  auto begin_tmp = begin_;
-  auto end_tmp = end_;
+  auto memento = Save();
 
   outer_array_size_ = other.outer_array_size_;
 
-  deque_ = new T*[outer_array_size_];
-  for (size_t i = 0; i < outer_array_size_; ++i) {
-    deque_[i] = static_cast<T*>(operator new(sizeof(T) * kSizeOfInnerArray));
-  }
+  SafeAllocation();
 
   very_begin_iterator_ = iterator(deque_, 0);
   very_end_iterator_ = iterator(deque_ + outer_array_size_, 0);
   begin_ = very_begin_iterator_ + (other.begin_ - other.very_begin_iterator_);
   end_ = very_begin_iterator_ + (other.end_ - other.very_begin_iterator_);
 
-  auto this_iter = this->begin_;
-  auto other_iter = other.begin_;
-  while (this_iter < this->end_) {
-    try {
-      *this_iter = *other_iter;
-    } catch (...) {
-      for (auto iter = this->begin_; iter < this_iter; ++iter) {
-        iter->~T();
-      }
-      for (size_t i = 0; i < outer_array_size_; ++i) {
-        operator delete[](deque_[i]);
-      }
-      delete[] deque_;
-
-      deque_ = deque_tmp;
-      outer_array_size_ = outer_array_size_tmp;
-      very_begin_iterator_ = very_begin_iterator_tmp;
-      very_end_iterator_ = very_end_iterator_tmp;
-      begin_ = begin_tmp;
-      end_ = end_tmp;
-      throw;
-    }
-    ++this_iter;
-    ++other_iter;
+  try {
+    SafeCopy(other.begin_);
+  } catch (...) {
+    Restore(memento);
+    throw;
   }
 
-  while (begin_tmp != end_tmp) {
-    begin_tmp->~T();
-    ++begin_tmp;
+  Destroy<T>(memento.begin, memento.end);
+  for (size_t i = 0; i < memento.outer_size; ++i) {
+    operator delete[](memento.deque[i]);
   }
-
-  for (size_t i = 0; i < outer_array_size_tmp; ++i) {
-    operator delete[](deque_tmp[i]);
-  }
-  delete[] deque_tmp;
+  delete[] memento.deque;
 
   return *this;
 }
 
-template <typename T>
-typename Deque<T>::size_type Deque<T>::size() const {
+template <typename T> typename Deque<T>::size_type Deque<T>::size() const {
   return end_ - begin_;
 }
 
@@ -462,13 +477,12 @@ typename Deque<T>::const_reference Deque<T>::operator[](size_type pos) const {
   return *(begin_ + pos);
 }
 
-template <typename T>
-typename Deque<T>::reference Deque<T>::at(size_type pos) {
+template <typename T> typename Deque<T>::reference Deque<T>::at(size_type pos) {
   if (size() <= pos) {
     throw std::out_of_range("out of range");
   }
 
-  return *(begin_ + pos);
+  return operator[](pos);
 }
 
 template <typename T>
@@ -477,11 +491,10 @@ typename Deque<T>::const_reference Deque<T>::at(size_type pos) const {
     throw std::out_of_range("out of range");
   }
 
-  return *(begin_ + pos);
+  return operator[](pos);
 }
 
-template <typename T>
-void Deque<T>::push_back(const_reference value) {
+template <typename T> void Deque<T>::push_back(const_reference value) {
   if (end_ == very_end_iterator_) {
     resize();
   }
@@ -489,14 +502,12 @@ void Deque<T>::push_back(const_reference value) {
   ++end_;
 }
 
-template <typename T>
-void Deque<T>::pop_back() {
+template <typename T> void Deque<T>::pop_back() {
   end_->~T();
   --end_;
 }
 
-template <typename T>
-void Deque<T>::push_front(const_reference value) {
+template <typename T> void Deque<T>::push_front(const_reference value) {
   if (begin_ == very_begin_iterator_) {
     resize();
   }
@@ -509,14 +520,12 @@ void Deque<T>::push_front(const_reference value) {
   }
 }
 
-template <typename T>
-void Deque<T>::pop_front() {
+template <typename T> void Deque<T>::pop_front() {
   begin_->~T();
   ++begin_;
 }
 
-template <typename T>
-typename Deque<T>::iterator Deque<T>::begin() {
+template <typename T> typename Deque<T>::iterator Deque<T>::begin() {
   return begin_;
 }
 
@@ -530,23 +539,19 @@ typename Deque<T>::const_iterator Deque<T>::cbegin() const {
   return begin_;
 }
 
-template <typename T>
-typename Deque<T>::iterator Deque<T>::end() {
+template <typename T> typename Deque<T>::iterator Deque<T>::end() {
   return end_;
 }
 
-template <typename T>
-typename Deque<T>::const_iterator Deque<T>::end() const {
+template <typename T> typename Deque<T>::const_iterator Deque<T>::end() const {
   return end_;
 }
 
-template <typename T>
-typename Deque<T>::const_iterator Deque<T>::cend() const {
+template <typename T> typename Deque<T>::const_iterator Deque<T>::cend() const {
   return end_;
 }
 
-template <typename T>
-typename Deque<T>::reverse_iterator Deque<T>::rbegin() {
+template <typename T> typename Deque<T>::reverse_iterator Deque<T>::rbegin() {
   return reverse_iterator(end_);
 }
 
@@ -560,8 +565,7 @@ typename Deque<T>::const_reverse_iterator Deque<T>::crbegin() const {
   return const_reverse_iterator(end_);
 }
 
-template <typename T>
-typename Deque<T>::reverse_iterator Deque<T>::rend() {
+template <typename T> typename Deque<T>::reverse_iterator Deque<T>::rend() {
   return reverse_iterator(begin_);
 }
 
@@ -605,29 +609,26 @@ typename Deque<T>::iterator Deque<T>::erase(Deque<T>::const_iterator pos) {
   return begin_ + shift;
 }
 
-template <typename T>
-void Deque<T>::resize() {
+template <typename T> void Deque<T>::resize() {
   if (deque_ != nullptr) {
-    auto old_deque = deque_;
+    Memento memento = Save();
     outer_array_size_ *= 2;
-    deque_ = new T*[outer_array_size_];
+    try {
+      SafeAllocation();
+    } catch (...) {
+      Restore(memento);
+      throw;
+    }
 
     auto begin_shift = begin_ - very_begin_iterator_;
     auto end_shift = end_ - very_begin_iterator_;
 
     auto shift = outer_array_size_ / 4;
-
-    for (size_t i = 0; i < shift; ++i) {
-      deque_[i] = static_cast<T*>(operator new(sizeof(T) * kSizeOfInnerArray));
-    }
     for (size_t i = shift; i < shift + outer_array_size_ / 2; ++i) {
-      deque_[i] = old_deque[i - shift];
-    }
-    for (size_t i = shift + outer_array_size_ / 2; i < outer_array_size_; ++i) {
-      deque_[i] = static_cast<T*>(operator new(sizeof(T) * kSizeOfInnerArray));
+      deque_[i] = memento.deque[i - shift];
     }
 
-    delete[] old_deque;
+    delete[] memento.deque;
 
     very_begin_iterator_ = iterator(deque_, 0);
     very_end_iterator_ = iterator(deque_ + outer_array_size_, 0);
@@ -636,10 +637,12 @@ void Deque<T>::resize() {
     begin_ = relative_begin + begin_shift;
     end_ = relative_begin + end_shift;
   } else {
+    auto memento = Save();
     outer_array_size_ = 2;
-    deque_ = new T*[outer_array_size_];
-    for (size_t i = 0; i < outer_array_size_; ++i) {
-      deque_[i] = static_cast<T*>(operator new(sizeof(T) * kSizeOfInnerArray));
+    try {
+      SafeAllocation();
+    } catch (...) {
+      Restore(memento);
     }
 
     very_begin_iterator_ = iterator(deque_, 0);
@@ -650,8 +653,7 @@ void Deque<T>::resize() {
   }
 }
 
-template<typename T>
-Deque<T>::~Deque() {
+template <typename T> Deque<T>::~Deque() {
   while (begin_ != end_) {
     begin_->~T();
     ++begin_;
@@ -659,13 +661,7 @@ Deque<T>::~Deque() {
   for (size_t i = 0; i < outer_array_size_; ++i) {
     operator delete[](deque_[i]);
   }
-  delete deque_;
+  delete[] deque_;
 }
 
-template <typename T>
-template <class... Args>
-void Deque<T>::emplace_back(Args &&...args) {
-
-}
-
-#endif  // DEQUE__DEQUE_H_
+#endif // DEQUE__DEQUE_H_
