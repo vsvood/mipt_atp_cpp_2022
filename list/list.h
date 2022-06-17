@@ -30,7 +30,7 @@ class StackStorage {
  private:
   size_t size_ = N;
   char storage_[N];
-  void* top_ = &storage_;
+  void* top_ = storage_;
 };
 
 template<size_t N>
@@ -46,9 +46,7 @@ T *StackStorage<N>::allocate(size_t n) {
 }
 
 template<size_t N>
-void StackStorage<N>::deallocate([[maybe_unused]]const void *p, [[maybe_unused]]size_t n) {
-  //if (static_cast<const char*>(p) + n == )
-}
+void StackStorage<N>::deallocate([[maybe_unused]]const void *p, [[maybe_unused]]size_t n) {}
 
 template <typename T, size_t N>
 class StackAllocator {
@@ -57,7 +55,6 @@ class StackAllocator {
   using pointer = T*;
   template<typename U>
   struct rebind {
-    //using other = StackAllocator<U, N>;
     typedef StackAllocator<U, N> other;
   };
 
@@ -183,22 +180,32 @@ class List {
   allocator_type get_allocator() const;
 
  private:
+  struct BaseNode;
   struct Node;
 
   size_t size_ = 0;
   iterator begin_;
   iterator end_;
+  using base_allocator_type = typename std::allocator_traits<Allocator>::template rebind_alloc<BaseNode>;
   using inner_allocator_type = typename std::allocator_traits<Allocator>::template rebind_alloc<Node>;
   inner_allocator_type allocator_;
+  base_allocator_type base_allocator_;
 };
 
 template<typename T, typename Allocator>
-struct List<T, Allocator>::Node {
+struct List<T, Allocator>::BaseNode {
+  BaseNode() = default;
+  virtual ~BaseNode() = default;
+  BaseNode* prev;
+  BaseNode* next;
+};
+
+template<typename T, typename Allocator>
+struct List<T, Allocator>::Node : BaseNode {
   Node() = default;
+  virtual ~Node() = default;
   Node(const T& value) : value(value) {}
   T value;
-  Node* prev;
-  Node* next;
 };
 
 template<typename T, typename Allocator>
@@ -212,7 +219,7 @@ class List<T, Allocator>::CommonIterator {
   using reference = typename std::conditional<is_const, const T&, T&>::type;
 
   CommonIterator();
-  explicit CommonIterator(Node* node);
+  explicit CommonIterator(BaseNode* node);
   CommonIterator(const CommonIterator<is_const>& other);
 
   CommonIterator<is_const>& operator++();
@@ -226,13 +233,13 @@ class List<T, Allocator>::CommonIterator {
   reference operator*();
   pointer operator->();
 
-  void SetNext(Node* next) const {
+  void SetNext(BaseNode* next) const {
     node_->next = next;
   }
-  void SetPrev(Node* prev) const {
+  void SetPrev(BaseNode* prev) const {
     node_->prev = prev;
   }
-  Node* GetNode() const {
+  BaseNode* GetNode() const {
     return node_;
   }
 
@@ -241,8 +248,9 @@ class List<T, Allocator>::CommonIterator {
   friend class CommonIterator<!is_const>;
 
  private:
-  Node* node_;
+  BaseNode* node_;
 };
+
 template<typename T, typename Allocator>
 template<bool is_const>
 List<T, Allocator>::CommonIterator<is_const>::operator CommonIterator<true>() const {
@@ -255,7 +263,7 @@ List<T, Allocator>::CommonIterator<is_const>::CommonIterator()  = default;
 
 template<typename T, typename Allocator>
 template<bool is_const>
-List<T, Allocator>::CommonIterator<is_const>::CommonIterator(Node *node) : node_(node) {
+List<T, Allocator>::CommonIterator<is_const>::CommonIterator(BaseNode *node) : node_(node) {
 }
 
 template<typename T, typename Allocator>
@@ -308,40 +316,18 @@ bool List<T, Allocator>::CommonIterator<is_const>::operator!=(const CommonIterat
 template<typename T, typename Allocator>
 template<bool is_const>
 typename List<T, Allocator>::template CommonIterator<is_const>::reference List<T, Allocator>::CommonIterator<is_const>::operator*() {
-  return node_->value;
+  return dynamic_cast<Node*>(node_)->value;
 }
 
 template<typename T, typename Allocator>
 template<bool is_const>
 typename List<T, Allocator>::template CommonIterator<is_const>::pointer List<T, Allocator>::CommonIterator<is_const>::operator->() {
-  return &(node_->value);
-}
-//FIXME default constructor due to base node
-template<typename T, typename Allocator>
-List<T, Allocator>::List() {
-  auto ptr = allocator_.allocate(1);
-  ptr->prev = ptr->next = ptr;
-  begin_ = iterator(ptr);
-  end_ = begin_;
+  return &(dynamic_cast<Node*>(node_)->value);
 }
 
 template<typename T, typename Allocator>
-List<T, Allocator>::List(size_t n) : List() {
-  while (n--) {
-    push_back(T());
-  }
-}
-
-template<typename T, typename Allocator>
-List<T, Allocator>::List(size_t n, const T &value) : List() {
-  while (n--) {
-    push_back(value);
-  }
-}
-
-template<typename T, typename Allocator>
-List<T, Allocator>::List(Allocator allocator) : allocator_(allocator) {
-  auto ptr = allocator_.allocate(1);
+List<T, Allocator>::List(Allocator allocator) : allocator_(allocator), base_allocator_(allocator) {
+  auto ptr = base_allocator_.allocate(1);
   ptr->prev = ptr->next = ptr;
   begin_ = iterator(ptr);
   end_ = begin_;
@@ -349,17 +335,36 @@ List<T, Allocator>::List(Allocator allocator) : allocator_(allocator) {
 
 template<typename T, typename Allocator>
 List<T, Allocator>::List(size_t n, Allocator allocator) : List(allocator) {
-  while (n--) {
-    insert(end_);
+  while(n--) {
+    try {
+      insert(end_);
+    } catch (...) {
+      this->~List();
+      throw;
+    }
   }
 }
 
 template<typename T, typename Allocator>
 List<T, Allocator>::List(size_t n, const T &value, Allocator allocator) : List(allocator) {
   while (n--) {
-    push_back(value);
+    try {
+      push_back(value);
+    } catch (...) {
+      this->~List();
+      throw;
+    }
   }
 }
+
+template<typename T, typename Allocator>
+List<T, Allocator>::List() : List(inner_allocator_type()){}
+
+template<typename T, typename Allocator>
+List<T, Allocator>::List(size_t n) : List(n, inner_allocator_type()) {}
+
+template<typename T, typename Allocator>
+List<T, Allocator>::List(size_t n, const T &value) : List(n, value, inner_allocator_type()) {}
 
 template<typename T, typename Allocator>
 List<T, Allocator>::List(const List &other) : List(std::allocator_traits<inner_allocator_type>::select_on_container_copy_construction(other.allocator_)) {
@@ -367,12 +372,14 @@ List<T, Allocator>::List(const List &other) : List(std::allocator_traits<inner_a
     push_back(elem);
   }
 }
-
+//FIXME
 template<typename T, typename Allocator>
 List<T, Allocator>::~List() {
   while (size_) {
     pop_back();
   }
+  //std::allocator_traits<base_allocator_type>::destroy(base_allocator_, begin_.GetNode());
+  //base_allocator_.deallocate(begin_.GetNode(), 1);
 }
 
 template<typename T, typename Allocator>
@@ -419,7 +426,6 @@ void List<T, Allocator>::push_front(const T& value) {
 
 template<typename T, typename Allocator>
 void List<T, Allocator>::pop_back() {
-  //auto tmp = end_;
   erase(std::prev(end_));
 }
 template<typename T, typename Allocator>
@@ -431,7 +437,7 @@ template<typename T, typename Allocator>
 typename List<T, Allocator>::iterator List<T, Allocator>::begin() {
   return begin_;
 }
-//Ah, shit and here we go again
+
 template<typename T, typename Allocator>
 typename List<T, Allocator>::const_iterator List<T, Allocator>::begin() const {
   return begin_;
@@ -491,7 +497,6 @@ template<typename T, typename Allocator>
 typename List<T, Allocator>::iterator List<T, Allocator>::insert(List::const_iterator pos, const T &value) {
   auto ptr = allocator_.allocate(1);
   std::allocator_traits<inner_allocator_type>::construct(allocator_, ptr, value);
-  //ptr->value = value;
   ++size_;
   ptr->next = pos.GetNode();
   ptr->prev = std::prev(pos).GetNode();
@@ -526,11 +531,10 @@ typename List<T, Allocator>::iterator List<T, Allocator>::erase(List::const_iter
   next.SetPrev(prev.GetNode());
   prev.SetNext(next.GetNode());
   std::allocator_traits<inner_allocator_type>::destroy(allocator_, pos.GetNode());
-  allocator_.deallocate(pos.GetNode(), 1);
+  allocator_.deallocate(dynamic_cast<Node*>(pos.GetNode()), 1);
   if (pos == begin_) {
     begin_ = iterator(next.GetNode());
   }
-  //allocator_.destroy(pos.GetNode());
   return iterator(next.GetNode());
 }
 
