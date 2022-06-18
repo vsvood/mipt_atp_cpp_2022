@@ -328,6 +328,7 @@ typename List<T, Allocator>::template CommonIterator<is_const>::pointer List<T, 
 template<typename T, typename Allocator>
 List<T, Allocator>::List(Allocator allocator) : allocator_(allocator), base_allocator_(allocator) {
   auto ptr = base_allocator_.allocate(1);
+  std::allocator_traits<base_allocator_type>::construct(base_allocator_, ptr);
   ptr->prev = ptr->next = ptr;
   begin_ = iterator(ptr);
   end_ = begin_;
@@ -335,25 +336,14 @@ List<T, Allocator>::List(Allocator allocator) : allocator_(allocator), base_allo
 
 template<typename T, typename Allocator>
 List<T, Allocator>::List(size_t n, Allocator allocator) : List(allocator) {
-  while(n--) {
-    try {
+    while(n--)
       insert(end_);
-    } catch (...) {
-      this->~List();
-      throw;
-    }
-  }
 }
 
 template<typename T, typename Allocator>
 List<T, Allocator>::List(size_t n, const T &value, Allocator allocator) : List(allocator) {
   while (n--) {
-    try {
       push_back(value);
-    } catch (...) {
-      this->~List();
-      throw;
-    }
   }
 }
 
@@ -368,18 +358,18 @@ List<T, Allocator>::List(size_t n, const T &value) : List(n, value, inner_alloca
 
 template<typename T, typename Allocator>
 List<T, Allocator>::List(const List &other) : List(std::allocator_traits<inner_allocator_type>::select_on_container_copy_construction(other.allocator_)) {
-  for (const auto& elem : other)  {
+  for (const auto &elem : other) {
     push_back(elem);
   }
 }
-//FIXME
+
 template<typename T, typename Allocator>
 List<T, Allocator>::~List() {
   while (size_) {
     pop_back();
   }
-  //std::allocator_traits<base_allocator_type>::destroy(base_allocator_, begin_.GetNode());
-  //base_allocator_.deallocate(begin_.GetNode(), 1);
+  std::allocator_traits<base_allocator_type>::destroy(base_allocator_, begin_.GetNode());
+  base_allocator_.deallocate(begin_.GetNode(), 1);
 }
 
 template<typename T, typename Allocator>
@@ -388,14 +378,16 @@ List<T, Allocator> &List<T, Allocator>::operator=(const List &other) {
   auto begin_tmp = begin_;
   auto end_tmp = end_;
   auto allocator_tmp = allocator_;
+  auto base_alloctor_tmp = base_allocator_;
   if (std::allocator_traits<allocator_type>::propagate_on_container_copy_assignment::value)
     allocator_ = other.get_allocator();
-  size_ = 0;
-  auto ptr = allocator_.allocate(1);
-  ptr->prev = ptr->next = ptr;
-  begin_ = iterator(ptr);
-  end_ = begin_;
   try {
+    size_ = 0;
+    auto ptr = base_allocator_.allocate(1);
+    std::allocator_traits<base_allocator_type>::construct(base_allocator_, ptr);
+    ptr->prev = ptr->next = ptr;
+    begin_ = iterator(ptr);
+    end_ = begin_;
     for (const auto& elem : other) {
       push_back(elem);
     }
@@ -405,10 +397,12 @@ List<T, Allocator> &List<T, Allocator>::operator=(const List &other) {
     begin_ = begin_tmp;
     end_ = end_tmp;
     allocator_ = allocator_tmp;
+    base_allocator_ = base_alloctor_tmp;
     throw;
   }
   while (begin_tmp != end_tmp) {
     std::allocator_traits<inner_allocator_type>::destroy(allocator_tmp, begin_tmp.GetNode());
+    base_alloctor_tmp.deallocate(begin_tmp.GetNode(), 1);
     ++begin_tmp;
   }
   return *this;
