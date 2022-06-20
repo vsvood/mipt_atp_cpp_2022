@@ -11,16 +11,16 @@ class SharedPtr;
 class SharedBase {
  protected:
   struct BaseControlBlock {
-    BaseControlBlock() : shared_counter(1), weak_counter(0) {};
-    BaseControlBlock(size_t shared_cnt, size_t weak_cnt) : shared_counter(shared_cnt), weak_counter(weak_cnt) {};
+    BaseControlBlock() noexcept : shared_counter(1), weak_counter(0) {};
+    BaseControlBlock(size_t shared_cnt, size_t weak_cnt) noexcept : shared_counter(shared_cnt), weak_counter(weak_cnt) {};
 
-    virtual void *get_ptr() const {
+    virtual void *get_ptr() const noexcept {
       return nullptr;
     };
 
-    virtual void delete_object() {};
+    virtual void delete_object() noexcept {};
 
-    virtual void deallocate_control_block() {};
+    virtual void deallocate_control_block() noexcept {};
 
     size_t shared_counter;
     size_t weak_counter;
@@ -33,7 +33,7 @@ class SharedBase {
 template<typename T>
 class SharedPtr : public SharedBase {
  public:
-  SharedPtr() {
+  SharedPtr() noexcept {
     control_block_ = nullptr;
     ptr_ = nullptr;
   }
@@ -67,7 +67,7 @@ class SharedPtr : public SharedBase {
   };
 
   template<typename Y>
-  SharedPtr(const SharedPtr<Y> &other) {
+  SharedPtr(const SharedPtr<Y> &other) noexcept {
     control_block_ = other.control_block_;
     if (control_block_ != nullptr) {
       ++(control_block_->shared_counter);
@@ -75,7 +75,7 @@ class SharedPtr : public SharedBase {
     ptr_ = other.ptr_;
   };
 
-  SharedPtr(const SharedPtr<T> &other) {
+  SharedPtr(const SharedPtr<T> &other) noexcept {
     control_block_ = other.control_block_;
     if (control_block_ != nullptr) {
       ++(control_block_->shared_counter);
@@ -84,7 +84,7 @@ class SharedPtr : public SharedBase {
   };
 
   template<typename Y>
-  SharedPtr(SharedPtr<Y> &&other) {
+  SharedPtr(SharedPtr<Y> &&other) noexcept {
     control_block_ = other.control_block_;
     ptr_ = other.ptr_;
 
@@ -93,7 +93,7 @@ class SharedPtr : public SharedBase {
   };
 
   template<typename Y>
-  SharedPtr &operator=(const SharedPtr<Y> &other) {
+  SharedPtr &operator=(const SharedPtr<Y> &other) noexcept {
     if (*this == other) {
       return *this;
     }
@@ -108,7 +108,7 @@ class SharedPtr : public SharedBase {
     return *this;
   };
 
-  SharedPtr &operator=(const SharedPtr<T> &other) {
+  SharedPtr &operator=(const SharedPtr<T> &other) noexcept {
     if (*this == other) {
       return *this;
     }
@@ -124,7 +124,7 @@ class SharedPtr : public SharedBase {
   }
 
   template<typename Y>
-  SharedPtr &operator=(SharedPtr<Y> &&other) {
+  SharedPtr &operator=(SharedPtr<Y> &&other) noexcept {
     if (*this == other) {
       if (control_block_ && control_block_->shared_counter > 1) {
         --(control_block_->shared_counter);
@@ -142,11 +142,11 @@ class SharedPtr : public SharedBase {
   };
 
   template<typename Y>
-  bool operator==(const SharedPtr<Y> &other) {
+  bool operator==(const SharedPtr<Y> &other) const noexcept {
     return (this->get() == other.get());
   }
 
-  void swap(SharedPtr &other) {
+  void swap(SharedPtr &other) noexcept {
     std::swap(control_block_, other.control_block_);
     std::swap(ptr_, other.ptr_);
   };
@@ -169,14 +169,14 @@ class SharedPtr : public SharedBase {
     }
   };
 
-  size_t use_count() const {
+  size_t use_count() const noexcept {
     if (control_block_ == nullptr) {
       return 0;
     }
     return control_block_->shared_counter;
   };
 
-  void reset() {
+  void reset() noexcept {
     SharedPtr().swap(*this);
   };
 
@@ -185,7 +185,7 @@ class SharedPtr : public SharedBase {
     SharedPtr(ptr).swap(*this);
   };
 
-  T *get() {
+  T *get() noexcept{
     return ptr_;
   };
 
@@ -193,19 +193,19 @@ class SharedPtr : public SharedBase {
     return ptr_;
   };
 
-  T &operator*() {
+  T &operator*() noexcept {
     return *ptr_;
   };
 
-  const T &operator*() const {
+  const T &operator*() const noexcept {
     return *ptr_;
   };
 
-  T *operator->() {
+  T *operator->() noexcept {
     return ptr_;
   }
 
-  const T *operator->() const {
+  const T *operator->() const noexcept {
     return ptr_;
   };
 
@@ -222,7 +222,7 @@ class SharedPtr : public SharedBase {
   template<typename Y, typename Alloc, typename... Args>
   friend SharedPtr<Y> allocateShared(const Alloc alloc, Args &&...args);
 
-  SharedPtr(BaseControlBlock *control_block) {
+  SharedPtr(BaseControlBlock *control_block) noexcept {
     control_block_ = control_block;
     ptr_ = static_cast<T *>(control_block_->get_ptr());
   };
@@ -231,17 +231,17 @@ class SharedPtr : public SharedBase {
   struct ControlBlock : BaseControlBlock {
     using cb_allocator = typename std::allocator_traits<Allocator>::template rebind_alloc<ControlBlock<U, Deleter, Allocator>>;
 
-    ControlBlock(U *ptr, Deleter deleter = std::default_delete<U>(), Allocator allocator = std::allocator<U>()) : ptr(ptr), deleter(deleter), allocator(allocator){};
+    ControlBlock(U *ptr, Deleter deleter = std::default_delete<U>(), Allocator allocator = std::allocator<U>()) noexcept : ptr(ptr), deleter(deleter), allocator(allocator){};
 
-    void *get_ptr() const final {
+    void *get_ptr() const noexcept final {
       return static_cast<T *>(ptr);
     }
 
-    void delete_object() final {
+    void delete_object() noexcept final {
       deleter(ptr);
     }
 
-    void deallocate_control_block() final {
+    void deallocate_control_block() noexcept final {
       cb_allocator cb_alloc = allocator;
       std::allocator_traits<cb_allocator>::deallocate(cb_alloc, this, 1);
     }
@@ -260,15 +260,15 @@ class SharedPtr : public SharedBase {
       ptr = new (object) U(std::forward<Args>(args)...);
     }
 
-    void *get_ptr() const final {
+    void *get_ptr() const noexcept final {
       return static_cast<T *>(ptr);
     }
 
-    void delete_object() final {
+    void delete_object() noexcept final {
       ptr->~T();
     }
 
-    void deallocate_control_block() final {
+    void deallocate_control_block() noexcept final {
       scb_allocator scb_alloc = allocator;
       scb_alloc.destroy(this);
       std::allocator_traits<scb_allocator>::deallocate(scb_alloc, this, 1);
@@ -288,7 +288,12 @@ SharedPtr<T> allocateShared(const Alloc alloc, Args &&...args) {
   using cb_allocator = typename std::allocator_traits<Alloc>::template rebind_alloc<typename SharedPtr<T>::template SharedControlBlock<T, Alloc>>;
   cb_allocator cb_alloc = alloc;
   auto ptr = cb_alloc.allocate(1);
-  std::allocator_traits<cb_allocator>::construct(cb_alloc, ptr, alloc, std::forward<Args>(args)...);
+  try {
+    std::allocator_traits<cb_allocator>::construct(cb_alloc, ptr, alloc, std::forward<Args>(args)...);
+  } catch (...) {
+    std::allocator_traits<cb_allocator>::deallocate(cb_alloc, ptr, 1);
+    throw;
+  }
   return SharedPtr<T>(static_cast<SharedBase::BaseControlBlock *>(ptr));
 }
 
@@ -305,14 +310,14 @@ class WeakPtr {
   };
 
   template<typename U>
-  WeakPtr(const WeakPtr<U> &other) {
+  WeakPtr(const WeakPtr<U> &other) noexcept {
     control_block_ = other.control_block_;
     if (control_block_ != nullptr) {
       ++(control_block_->weak_counter);
     }
   };
 
-  WeakPtr(const WeakPtr<T> &other) {
+  WeakPtr(const WeakPtr<T> &other) noexcept {
     control_block_ = other.control_block_;
     if (control_block_ != nullptr) {
       ++(control_block_->weak_counter);
@@ -320,13 +325,13 @@ class WeakPtr {
   }
 
   template<typename U>
-  WeakPtr(WeakPtr<U> &&other) {
+  WeakPtr(WeakPtr<U> &&other) noexcept {
     control_block_ = other.control_block_;
     other.control_block_ = nullptr;
   };
 
   template<typename U>
-  WeakPtr(const SharedPtr<U> &other) {
+  WeakPtr(const SharedPtr<U> &other) noexcept {
     control_block_ = other.control_block_;
     if (control_block_ != nullptr) {
       ++(control_block_->weak_counter);
@@ -334,7 +339,7 @@ class WeakPtr {
   };
 
   template<typename U>
-  WeakPtr<T> &operator=(const WeakPtr<U> &other) {
+  WeakPtr<T> &operator=(const WeakPtr<U> &other) noexcept {
     if (*this == other) {
       return *this;
     }
@@ -348,7 +353,7 @@ class WeakPtr {
     return *this;
   };
 
-  WeakPtr<T> &operator=(const WeakPtr<T> &other) {
+  WeakPtr<T> &operator=(const WeakPtr<T> &other) noexcept {
     if (*this == other) {
       return *this;
     }
@@ -363,7 +368,7 @@ class WeakPtr {
   }
 
   template<typename U>
-  WeakPtr<T> &operator=(WeakPtr<U> &&other) {
+  WeakPtr<T> &operator=(WeakPtr<U> &&other) noexcept {
     if (*this == other) {
       if (control_block_->weak_counter > 1) {
         --(control_block_->weak_counter);
@@ -379,7 +384,7 @@ class WeakPtr {
   };
 
   template<typename Y>
-  bool operator==(const WeakPtr<Y> &other) {
+  bool operator==(const WeakPtr<Y> &other) const noexcept {
     return (control_block_ == other.control_block_);
   }
 
@@ -398,21 +403,21 @@ class WeakPtr {
     }
   };
 
-  size_t use_count() const {
+  size_t use_count() const noexcept {
     if (control_block_ == nullptr) {
       return 0;
     }
     return control_block_->shared_counter;
   };
 
-  bool expired() const {
+  bool expired() const noexcept {
     if (control_block_ == nullptr) {
       return true;
     }
     return control_block_->shared_counter == 0;
   };
 
-  SharedPtr<T> lock() const {
+  SharedPtr<T> lock() const noexcept {
     ++(control_block_->shared_counter);
     return SharedPtr<T>(control_block_);
   };
